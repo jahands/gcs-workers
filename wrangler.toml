@@ -1,3 +1,7 @@
 name = "gcs-test"
 main = "src/index.ts"
 compatibility_date = "2023-07-12"
+
+kv_namespaces = [
+    { binding = "KV", id = "ec94b42bee244a0ba7a0fb4834915460" }
+]
