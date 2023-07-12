@@ -15,6 +15,22 @@ export interface GoogleKey {
   client_x509_cert_url: string;
 }
 
+/** Bearer token used to make requests */
+export interface GoogleToken {
+  access_token: string;
+  expires_in: number;
+  token_type: string;
+}
+
+function isGoogleToken(token: any): token is GoogleToken {
+  return (
+    token &&
+    typeof token.access_token === "string" &&
+    typeof token.expires_in === "number" &&
+    token.token_type === "Bearer"
+  );
+}
+
 // Inspiration: https://gist.github.com/markelliot/6627143be1fc8209c9662c504d0ff205
 //
 // GoogleOAuth encapsulates the logic required to retrieve an access token
@@ -25,42 +41,41 @@ export default class GoogleOAuth {
     private scopes: string[]
   ) {}
 
-  public async getGoogleAuthToken(): Promise<string | null> {
+  public async getGoogleAuthToken(): Promise<GoogleToken> {
     const { client_email: user, private_key: key } = this.googleKey;
     const scope = this.formatScopes(this.scopes);
     const jwtHeader = this.objectToBase64url({ alg: "RS256", typ: "JWT" });
 
-    try {
-      const assertiontime = Math.round(Date.now() / 1000);
-      const expirytime = assertiontime + 3600;
-      const claimset = this.objectToBase64url({
-        iss: user,
-        scope,
-        aud: "https://oauth2.googleapis.com/token",
-        exp: expirytime,
-        iat: assertiontime,
-      });
+    const assertiontime = Math.round(Date.now() / 1000);
+    const expirytime = assertiontime + 3600;
+    const claimset = this.objectToBase64url({
+      iss: user,
+      scope,
+      aud: "https://oauth2.googleapis.com/token",
+      exp: expirytime,
+      iat: assertiontime,
+    });
 
-      const jwtUnsigned = `${jwtHeader}.${claimset}`;
-      const signedJwt = `${jwtUnsigned}.${await this.sign(jwtUnsigned, key)}`;
-      const body = `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${signedJwt}`;
+    const jwtUnsigned = `${jwtHeader}.${claimset}`;
+    const signedJwt = `${jwtUnsigned}.${await this.sign(jwtUnsigned, key)}`;
+    const body = `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${signedJwt}`;
 
-      const response = await fetch(this.googleKey.token_uri, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Cache-Control": "no-cache",
-          Host: "oauth2.googleapis.com",
-        },
-        body,
-      });
+    const response = await fetch(this.googleKey.token_uri, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Cache-Control": "no-cache",
+        Host: "oauth2.googleapis.com",
+      },
+      body,
+    });
 
-      const resp = (await response.json()) as any;
-      return resp.access_token;
-    } catch (err) {
-      console.error(err);
-      return null;
+    const resp = (await response.json()) as GoogleToken;
+    if (!isGoogleToken(resp)) {
+      console.warn("Invalid token response", resp);
+      throw new Error("Invalid token response");
     }
+    return resp;
   }
 
   private objectToBase64url(object: object): string {

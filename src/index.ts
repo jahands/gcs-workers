@@ -5,6 +5,10 @@ export interface Env {
   KV: KVNamespace;
 }
 
+export interface KVMetadata {
+  expiration: number;
+}
+
 export default {
   async fetch(
     request: Request,
@@ -23,18 +27,38 @@ export default {
     // Initialize the service
     const oauth = new GoogleAuth(googleAuth, scopes);
     const start = Date.now();
-    let token = await env.KV.get("token");
+    let { value: access_token, metadata } =
+      await env.KV.getWithMetadata<KVMetadata>("token");
+
+    const expired = (metadata?.expiration || 0) < Date.now();
+    console.log({ expired, metadata });
+    console.log("expiresIn", ((metadata?.expiration || 0) - Date.now())/1000);
+
     const end = Date.now();
     console.log(`KV get took ${end - start}ms`);
-    if (!token) {
+    if (!access_token || expired) {
       console.log("getting new token");
-      token = await oauth.getGoogleAuthToken();
+      const start = Date.now();
+      const res = await oauth.getGoogleAuthToken();
+      access_token = res.access_token;
 
-      if (!token) {
+      const end = Date.now();
+      console.log(`token took ${end - start}ms`);
+
+      if (!access_token) {
         return new Response("Failed to get token");
       }
 
-      await env.KV.put("token", token, { expirationTtl: 60 });
+      // 4 minutes before expiry just in case
+      const padding = 60 * 4;
+      const expiration = Date.now() + (res.expires_in - padding) * 1000;
+      console.log("newExpiration", expiration);
+      const meta: KVMetadata = { expiration };
+
+      await env.KV.put("token", access_token, {
+        expirationTtl: res.expires_in - padding,
+        metadata: meta,
+      });
     }
 
     // Example with Google Cloud Storage
@@ -46,7 +70,7 @@ export default {
         method: "PATCH",
         body: JSON.stringify({ customTime: new Date().toISOString() }),
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${access_token}`,
           "Content-Type": "application/json",
         },
       }
