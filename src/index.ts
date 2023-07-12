@@ -30,13 +30,13 @@ export default {
     let { value: access_token, metadata } =
       await env.KV.getWithMetadata<KVMetadata>("token");
 
-    const expired = (metadata?.expiration || 0) < Date.now();
+    const expired = !access_token || (metadata?.expiration || 0) < Date.now();
     console.log({ expired, metadata });
     console.log("expiresIn", ((metadata?.expiration || 0) - Date.now())/1000);
 
     const end = Date.now();
     console.log(`KV get took ${end - start}ms`);
-    if (!access_token || expired) {
+    if (expired) {
       console.log("getting new token");
       const start = Date.now();
       const res = await oauth.getGoogleAuthToken();
