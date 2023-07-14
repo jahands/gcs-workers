@@ -32,7 +32,7 @@ export default {
 
     const expired = !access_token || (metadata?.expiration || 0) < Date.now();
     console.log({ expired, metadata });
-    console.log("expiresIn", ((metadata?.expiration || 0) - Date.now())/1000);
+    console.log("expiresIn", ((metadata?.expiration || 0) - Date.now()) / 1000);
 
     const end = Date.now();
     console.log(`KV get took ${end - start}ms`);
